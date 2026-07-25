@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>VoiceTask</title>
+<style>
+  :root {
+    --ink: #12161d;
+    --panel: #1a2029;
+    --panel-line: #2a3140;
+    --paper: #edeef0;
+    --paper-dim: #9aa3b2;
+    --signal: #f2a93b;
+    --signal-dim: #f2a93b33;
+    --teal: #4fa8a0;
+    --high: #e8623d;
+    --medium: #f2a93b;
+    --low: #4fa8a0;
+    --done: #4a5262;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    min-height: 100dvh;
+  }
+
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top, 24px) 20px calc(env(safe-area-inset-bottom, 24px) + 40px);
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+
+  header {
+    text-align: center;
+    padding: 28px 0 8px;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--paper-dim);
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  /* --- mic --- */
+  .mic-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 0 20px;
+    position: relative;
+  }
+
+  .mic-ring {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mic-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--panel-line);
+    transition: all 0.25s ease;
+  }
+
+  .mic-ring.listening::before {
+    border-color: var(--signal);
+    animation: pulse 1.4s ease-out infinite;
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(0.92); opacity: 0.9; box-shadow: 0 0 0 0 var(--signal-dim); }
+    70% { transform: scale(1.18); opacity: 0; box-shadow: 0 0 0 14px transparent; }
+    100% { transform: scale(0.92); opacity: 0; }
+  }
+
+  .mic-btn {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: none;
+    background: var(--panel);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+    box-shadow: inset 0 0 0 1px var(--panel-line);
+  }
+
+  .mic-btn:active { transform: scale(0.96); }
+
+  .mic-btn.listening {
+    background: var(--signal);
+    color: var(--ink);
+  }
+
+  .mic-btn svg { width: 34px; height: 34px; }
+
+  .status-line {
+    margin-top: 18px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    color: var(--paper-dim);
+    text-align: center;
+    min-height: 34px;
+    line-height: 1.5;
+    padding: 0 12px;
+  }
+
+  .status-line.active { color: var(--signal); }
+
+  /* --- type-to-command fallback --- */
+  .type-row {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 24px;
+  }
+
+  .type-row input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--paper);
+    font-size: 15px;
+  }
+
+  .type-row input::placeholder { color: var(--paper-dim); }
+
+  .type-row button {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    color: var(--paper);
+    border-radius: 10px;
+    padding: 0 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* --- task list --- */
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 8px 0 10px;
+  }
+
+  .list-header h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--paper-dim);
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .list-header .count {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--paper-dim);
+  }
+
+  .tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .task {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 13px 14px;
+    border-left: 3px solid var(--medium);
+  }
+
+  .task.high { border-left-color: var(--high); }
+  .task.medium { border-left-color: var(--medium); }
+  .task.low { border-left-color: var(--low); }
+  .task.done { border-left-color: var(--done); opacity: 0.5; }
+  .task.done .task-title { text-decoration: line-through; }
+
+  .task-title {
+    flex: 1;
+    font-size: 15px;
+  }
+
+  .task-priority {
+    font-family: ui-monospace, monospace;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--paper-dim);
+  }
+
+  .task-actions { display: flex; gap: 6px; }
+
+  .icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--paper-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .icon-btn:active { background: var(--panel-line); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .empty-state {
+    text-align: center;
+    color: var(--paper-dim);
+    font-size: 14px;
+    padding: 40px 20px;
+    border: 1px dashed var(--panel-line);
+    border-radius: 12px;
+  }
+
+  /* --- excel bar --- */
+  .excel-bar {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .ghost-btn {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    border-radius: 10px;
+    padding: 11px;
+    font-size: 13px;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  #import-input { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">VoiceTask</p>
+    <h1>Say it, it's on the list.</h1>
+  </header>
+
+  <div class="mic-stage">
+    <div class="mic-ring" id="mic-ring">
+      <button class="mic-btn" id="mic-btn" aria-label="Start voice command">
+        <svg id="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/>
+          <path d="M19 11a7 7 0 0 1-14 0"/>
+          <path d="M12 18v3"/>
+        </svg>
+      </button>
+    </div>
+    <p class="status-line" id="status-line">Tap the mic and say a command</p>
+  </div>
+
+  <div class="type-row">
+    <input type="text" id="type-input" placeholder="or type a command…" />
+    <button id="type-send">Send</button>
+  </div>
+
+  <div class="list-header">
+    <h2>Tasks</h2>
+    <span class="count" id="task-count">0</span>
+  </div>
+
+  <div class="tasks" id="task-list"></div>
+
+  <div class="excel-bar">
+    <button class="ghost-btn" id="export-btn">Export to Excel</button>
+    <button class="ghost-btn" id="import-btn">Import from Excel</button>
+    <input type="file" id="import-input" accept=".xlsx" />
+  </div>
+</div>
+
+<script>
+const API = ""; // same-origin; set to your backend URL if hosted separately
+
+const micBtn = document.getElementById("mic-btn");
+const micRing = document.getElementById("mic-ring");
+const statusLine = document.getElementById("status-line");
+const taskList = document.getElementById("task-list");
+const taskCount = document.getElementById("task-count");
+const typeInput = document.getElementById("type-input");
+const typeSend = document.getElementById("type-send");
+const exportBtn = document.getElementById("export-btn");
+const importBtn = document.getElementById("import-btn");
+const importInput = document.getElementById("import-input");
+
+function setStatus(text, active = false) {
+  statusLine.textContent = text;
+  statusLine.classList.toggle("active", active);
+}
+
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1.02;
+  window.speechSynthesis.speak(utter);
+}
+
+function iconTrash() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg>`;
+}
+function iconCheck() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5"/></svg>`;
+}
+
+function renderTasks(tasks) {
+  taskCount.textContent = tasks.length;
+  if (!tasks.length) {
+    taskList.innerHTML = `<div class="empty-state">No tasks yet — say "add &lt;task&gt;" to start</div>`;
+    return;
+  }
+  taskList.innerHTML = tasks.map(t => `
+    <div class="task ${t.priority} ${t.status === 'done' ? 'done' : ''}" data-id="${t.id}">
+      <div>
+        <div class="task-title">${escapeHtml(t.title)}</div>
+        <div class="task-priority">${t.priority}${t.status === 'done' ? ' · done' : ''}</div>
+      </div>
+      <div class="task-actions">
+        ${t.status !== 'done' ? `<button class="icon-btn complete-btn" data-id="${t.id}">${iconCheck()}</button>` : ''}
+        <button class="icon-btn delete-btn" data-id="${t.id}">${iconTrash()}</button>
+      </div>
+    </div>
+  `).join("");
+
+  taskList.querySelectorAll(".complete-btn").forEach(b =>
+    b.addEventListener("click", () => completeTask(b.dataset.id)));
+  taskList.querySelectorAll(".delete-btn").forEach(b =>
+    b.addEventListener("click", () => deleteTask(b.dataset.id)));
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function fetchTasks() {
+  const res = await fetch(`${API}/api/tasks?status=all`);
+  const tasks = await res.json();
+  renderTasks(tasks);
+}
+
+async function completeTask(id) {
+  await fetch(`${API}/api/tasks/${id}/complete`, { method: "POST" });
+  fetchTasks();
+}
+
+async function deleteTask(id) {
+  await fetch(`${API}/api/tasks/${id}`, { method: "DELETE" });
+  fetchTasks();
+}
+
+async function sendCommand(text) {
+  setStatus(`Thinking about "${text}"…`, true);
+  try {
+    const res = await fetch(`${API}/api/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    setStatus(data.message);
+    speak(data.message);
+    renderTasks(data.tasks || []);
+  } catch (e) {
+    setStatus("Couldn't reach the server. Check your connection.");
+  }
+}
+
+typeSend.addEventListener("click", () => {
+  const text = typeInput.value.trim();
+  if (text) { sendCommand(text); typeInput.value = ""; }
+});
+typeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") typeSend.click();
+});
+
+/* ---- voice ---- */
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+let listening = false;
+
+if (SpeechRecognition) {
+  recognizer = new SpeechRecognition();
+  recognizer.lang = "en-US";
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+
+  recognizer.onstart = () => {
+    listening = true;
+    micBtn.classList.add("listening");
+    micRing.classList.add("listening");
+    setStatus("Listening…", true);
+  };
+
+  recognizer.onresult = (event) => {
+    const text = event.results[0][0].transcript;
+    sendCommand(text);
+  };
+
+  recognizer.onerror = (e) => {
+    setStatus(e.error === "not-allowed" ? "Mic access denied — check browser settings" : "Didn't catch that, try again");
+  };
+
+  recognizer.onend = () => {
+    listening = false;
+    micBtn.classList.remove("listening");
+    micRing.classList.remove("listening");
+  };
+} else {
+  setStatus("Voice input isn't supported in this browser — type a command below");
+  micBtn.disabled = true;
+  micBtn.style.opacity = "0.4";
+}
+
+micBtn.addEventListener("click", () => {
+  if (!recognizer) return;
+  if (listening) {
+    recognizer.stop();
+  } else {
+    recognizer.start();
+  }
+});
+
+/* ---- excel ---- */
+exportBtn.addEventListener("click", () => {
+  window.location.href = `${API}/api/export`;
+});
+
+importBtn.addEventListener("click", () => importInput.click());
+
+importInput.addEventListener("change", async () => {
+  const file = importInput.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+  setStatus("Importing…", true);
+  try {
+    const res = await fetch(`${API}/api/import`, { method: "POST", body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      setStatus(`Imported ${data.imported} tasks (${data.skipped} skipped as duplicates)`);
+      renderTasks(data.tasks || []);
+    } else {
+      setStatus(data.detail || "Import failed");
+    }
+  } catch (e) {
+    setStatus("Import failed — check your connection");
+  }
+  importInput.value = "";
+});
+
+fetchTasks();
+</script>
+</body>
+</html>
