@@ -69,12 +69,12 @@ def init_db():
 
 def add_task(title: str, priority: str = "medium") -> int:
     def _op(conn):
-        conn.execute(
-            "INSERT INTO tasks (title, priority, status, created_at) VALUES (?, ?, 'pending', ?)",
+        cur = conn.execute(
+            "INSERT INTO tasks (title, priority, status, created_at) VALUES (?, ?, 'pending', ?) RETURNING id",
             (title, priority, datetime.now().isoformat(timespec="seconds")),
         )
+        row = cur.fetchone()
         conn.commit()
-        row = conn.execute("SELECT id FROM tasks ORDER BY id DESC LIMIT 1").fetchone()
         return row[0]
     return _run(_op)
 

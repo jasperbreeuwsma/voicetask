@@ -58,7 +58,10 @@ class CommandRequest(BaseModel):
 
 @app.get("/api/tasks")
 def get_tasks(status: str = "all", priority: str = "all"):
-    return storage.list_tasks(status=status, priority=priority)
+    try:
+        return storage.list_tasks(status=status, priority=priority)
+    except Exception:
+        return []
 
 
 @app.post("/api/tasks")
@@ -165,8 +168,13 @@ def run_command(body: CommandRequest):
         return execute_intent(intent)
     except Exception as e:
         # Surface the real error instead of letting it crash into a
-        # non-JSON 500 page (which the frontend can't parse).
-        return {"message": f"Error: {e}", "tasks": storage.list_tasks()}
+        # non-JSON 500 page (which the frontend can't parse). Guard the
+        # fallback task list too, in case the database itself is down.
+        try:
+            tasks = storage.list_tasks()
+        except Exception:
+            tasks = []
+        return {"message": f"Error: {e}", "tasks": tasks}
 
 
 # ---------- excel ----------
