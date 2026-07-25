@@ -160,8 +160,13 @@ def execute_intent(intent: dict) -> dict:
 
 @app.post("/api/command")
 def run_command(body: CommandRequest):
-    intent = llm_parser.parse_command(body.text)
-    return execute_intent(intent)
+    try:
+        intent = llm_parser.parse_command(body.text)
+        return execute_intent(intent)
+    except Exception as e:
+        # Surface the real error instead of letting it crash into a
+        # non-JSON 500 page (which the frontend can't parse).
+        return {"message": f"Error: {e}", "tasks": storage.list_tasks()}
 
 
 # ---------- excel ----------
