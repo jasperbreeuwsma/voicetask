@@ -86,6 +86,12 @@
     border-radius: 50%;
     border: 1px solid var(--panel-line);
     transition: all 0.25s ease;
+    pointer-events: none;
+  }
+
+  .mic-btn {
+    position: relative;
+    z-index: 1;
   }
 
   .mic-ring.listening::before {
