@@ -23,6 +23,9 @@ LOCAL_DB_PATH = Path(__file__).parent / "tasks.db"
 COLUMNS = ["id", "title", "priority", "status", "created_at"]
 
 
+_conn = None
+
+
 def get_connection():
     url = os.environ.get("TURSO_DATABASE_URL")
     token = os.environ.get("TURSO_AUTH_TOKEN")
@@ -31,16 +34,29 @@ def get_connection():
     return libsql.connect(database=str(LOCAL_DB_PATH))
 
 
+def _get_conn():
+    global _conn
+    if _conn is None:
+        _conn = get_connection()
+    return _conn
+
+
+def _reset_conn():
+    global _conn
+    _conn = None
+
+
 def _run(fn, retries: int = 4, delay: float = 0.5):
-    """Run fn(conn) against a fresh connection, retrying on transient network errors.
-    Uses exponential backoff: 0.5s, 1s, 2s, 4s between attempts."""
+    """Run fn(conn) reusing a cached connection, reconnecting and retrying
+    with exponential backoff (0.5s, 1s, 2s, 4s) if something goes wrong."""
     last_err = None
     for attempt in range(retries + 1):
         try:
-            conn = get_connection()
+            conn = _get_conn()
             return fn(conn)
         except Exception as e:
             last_err = e
+            _reset_conn()  # force a fresh connection on the next attempt
             if attempt < retries:
                 time.sleep(delay * (2 ** attempt))
                 continue
