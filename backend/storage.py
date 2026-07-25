@@ -31,8 +31,9 @@ def get_connection():
     return libsql.connect(database=str(LOCAL_DB_PATH))
 
 
-def _run(fn, retries: int = 2, delay: float = 0.4):
-    """Run fn(conn) against a fresh connection, retrying on transient network errors."""
+def _run(fn, retries: int = 4, delay: float = 0.5):
+    """Run fn(conn) against a fresh connection, retrying on transient network errors.
+    Uses exponential backoff: 0.5s, 1s, 2s, 4s between attempts."""
     last_err = None
     for attempt in range(retries + 1):
         try:
@@ -41,7 +42,7 @@ def _run(fn, retries: int = 2, delay: float = 0.4):
         except Exception as e:
             last_err = e
             if attempt < retries:
-                time.sleep(delay)
+                time.sleep(delay * (2 ** attempt))
                 continue
             raise last_err
 
