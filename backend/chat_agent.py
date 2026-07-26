@@ -267,8 +267,8 @@ def handle_message(user_text: str):
     options = None
     any_tool_called = False
 
-    for _ in range(MAX_TOOL_ITERATIONS):
-        response = client.messages.create(
+    for i in range(MAX_TOOL_ITERATIONS):
+        create_kwargs = dict(
             model=model,
             max_tokens=600,
             temperature=0,
@@ -276,6 +276,15 @@ def handle_message(user_text: str):
             messages=messages,
             tools=TOOLS,
         )
+        if i == 0:
+            # Force the FIRST step of every turn to call some tool. This is
+            # what actually fixed the "confidently claims Done with zero
+            # tool calls" bug - a prompt instruction alone wasn't reliable
+            # enough, so this makes that failure mode structurally
+            # impossible instead of just discouraged.
+            create_kwargs["tool_choice"] = {"type": "any"}
+
+        response = client.messages.create(**create_kwargs)
 
         text_blocks = "".join(b.text for b in response.content if b.type == "text").strip()
 
