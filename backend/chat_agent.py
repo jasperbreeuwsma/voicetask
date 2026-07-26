@@ -45,6 +45,26 @@ genuinely useful assistant, not just a command executor:
 - recurrence is one of: daily, weekly, monthly, or null.
 - When you need to act on a specific task, call list_tasks or search_tasks
   first to find its id, then use that id in the action tool. Don't guess ids.
+- When you ask a question that has a natural small set of likely answers -
+  confirming an action ("add it anyway?"), choosing between two similar
+  tasks, picking a priority or date - call suggest_options with 2-4 short
+  tappable replies (each under about 6 words) IN THE SAME TURN as your
+  question text, so the user can tap instead of typing. Always include your
+  actual question as normal reply text alongside the tool call. Don't call
+  suggest_options for open-ended questions that have no natural short answers.
+
+CRITICAL - never claim an action succeeded unless it actually did:
+- NEVER say "Done", "added", "completed", or any confirmation of a change
+  UNLESS you called the corresponding tool IN THIS TURN and its result showed
+  success. Proposing or discussing an action in a previous turn does not mean
+  it happened - if the user then confirms ("yes", "do it"), you must actually
+  call the tool now, in this turn, before confirming anything.
+- Every tool result is JSON. If it contains an "error" key, the action FAILED
+  - do not tell the user it succeeded. Tell them plainly it failed and ask if
+  they'd like you to try again.
+- If you are ever unsure whether something already happened, call list_tasks
+  or search_tasks to check the real current state before answering - never
+  assume or guess based on what the conversation implied.
 """
 
 
@@ -149,10 +169,28 @@ TOOLS = [
             "required": ["task_id", "my_day"],
         },
     },
+    {
+        "name": "suggest_options",
+        "description": "Attach 2-4 short tappable quick-reply buttons to the question you're asking the user right now. Always pair this with your actual question as normal reply text in the same turn.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "description": "Short tappable replies, e.g. ['Yes, add it', 'No thanks']",
+                },
+            },
+            "required": ["options"],
+        },
+    },
 ]
 
 
 def _execute_tool(name: str, tool_input: dict) -> dict:
+    print(f"[chat_agent] calling tool '{name}' with {tool_input}")
     try:
         if name == "list_tasks":
             tasks = storage.list_tasks(
@@ -198,12 +236,17 @@ def _execute_tool(name: str, tool_input: dict) -> dict:
             storage.set_my_day(tool_input["task_id"], tool_input["my_day"])
             return {"ok": True}
 
+        if name == "suggest_options":
+            return {"ok": True}  # UI-only signal, handled specially in the agent loop
+
         return {"error": f"unknown tool {name}"}
     except Exception as e:
+        print(f"[chat_agent] tool '{name}' failed with input {tool_input}: {e}")
         return {"error": str(e)}
 
 
-def handle_message(user_text: str) -> str:
+def handle_message(user_text: str):
+    """Returns (reply_text, options_or_none)."""
     import anthropic
 
     client = anthropic.Anthropic()
@@ -215,6 +258,8 @@ def handle_message(user_text: str) -> str:
     messages = [{"role": m["role"], "content": m["content"]} for m in history if m["role"] in ("user", "assistant")]
 
     final_text = "Sorry, I couldn't come up with a response."
+    options = None
+
     for _ in range(MAX_TOOL_ITERATIONS):
         response = client.messages.create(
             model=model,
@@ -224,25 +269,35 @@ def handle_message(user_text: str) -> str:
             tools=TOOLS,
         )
 
+        text_blocks = "".join(b.text for b in response.content if b.type == "text").strip()
+
         if response.stop_reason != "tool_use":
-            final_text = "".join(b.text for b in response.content if b.type == "text").strip()
-            if not final_text:
-                final_text = "Done."
+            final_text = text_blocks or "Done."
             break
+
+        tool_blocks = [b for b in response.content if b.type == "tool_use"]
+        suggest_block = next((b for b in tool_blocks if b.name == "suggest_options"), None)
 
         messages.append({"role": "assistant", "content": response.content})
         tool_results = []
-        for block in response.content:
-            if block.type == "tool_use":
-                result = _execute_tool(block.name, block.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result),
-                })
+        for block in tool_blocks:
+            result = _execute_tool(block.name, block.input)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": json.dumps(result),
+            })
+
+        if suggest_block:
+            # Terminal step: the question + its quick replies arrive together,
+            # no need for another round trip.
+            options = suggest_block.input.get("options")
+            final_text = text_blocks or "Which would you like?"
+            break
+
         messages.append({"role": "user", "content": tool_results})
     else:
         final_text = "That turned into a lot of steps - could you rephrase or simplify the request?"
 
     storage.add_message("assistant", final_text)
-    return final_text
+    return final_text, options

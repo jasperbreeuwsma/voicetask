@@ -258,6 +258,24 @@
     padding: 10px;
   }
 
+  .option-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-self: flex-start;
+    max-width: 84%;
+  }
+  .option-chip {
+    background: var(--panel);
+    border: 1px solid var(--signal);
+    color: var(--signal);
+    border-radius: 999px;
+    padding: 7px 13px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .option-chip:active { background: var(--signal-dim); }
+
   /* --- type-to-command fallback --- */
   .type-row {
     display: flex;
@@ -876,12 +894,29 @@ async function toggleMyDay(id, newVal) {
 }
 
 /* ---- chat thread ---- */
-function addBubble(role, text) {
+function addBubble(role, text, options) {
   chatEmpty.style.display = "none";
   const div = document.createElement("div");
   div.className = `bubble ${role}`;
   div.textContent = text;
   chatThread.appendChild(div);
+
+  if (options && options.length) {
+    const chipRow = document.createElement("div");
+    chipRow.className = "option-chips";
+    options.forEach(opt => {
+      const chip = document.createElement("button");
+      chip.className = "option-chip";
+      chip.textContent = opt;
+      chip.addEventListener("click", () => {
+        chipRow.remove(); // one shot - avoid stale buttons after the reply moves on
+        sendCommand(opt);
+      });
+      chipRow.appendChild(chip);
+    });
+    chatThread.appendChild(chipRow);
+  }
+
   chatThread.scrollTop = chatThread.scrollHeight;
 }
 
@@ -910,7 +945,7 @@ async function sendCommand(text) {
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
-    addBubble("assistant", data.message);
+    addBubble("assistant", data.message, data.options);
     setStatus("Tap the mic, ask or say a command");
     speak(data.message);
     renderTasks(data.tasks || []);

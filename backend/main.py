@@ -271,18 +271,18 @@ def chat_clear():
 @app.post("/api/chat")
 def chat(body: ChatRequest):
     try:
-        reply = chat_agent.handle_message(body.text)
+        reply, options = chat_agent.handle_message(body.text)
         try:
             tasks = storage.list_tasks()
         except Exception:
             tasks = []
-        return {"message": reply, "tasks": tasks}
+        return {"message": reply, "options": options, "tasks": tasks}
     except Exception as e:
         try:
             tasks = storage.list_tasks()
         except Exception:
             tasks = []
-        return {"message": f"Error: {e}", "tasks": tasks}
+        return {"message": f"Error: {e}", "options": None, "tasks": tasks}
 
 
 # ---------- excel ----------
