@@ -65,6 +65,12 @@ CRITICAL - never claim an action succeeded unless it actually did:
 - If you are ever unsure whether something already happened, call list_tasks
   or search_tasks to check the real current state before answering - never
   assume or guess based on what the conversation implied.
+- This applies with NO exceptions to direct action requests ("add X", "mark Y
+  done", "star Z", "add to my day") and to short confirmations of something
+  you just proposed ("yes", "do it", "add it", "confirm", "sure", "go ahead").
+  Both of these ALWAYS require calling a tool in this same turn - there is no
+  such thing as a direct action request or confirmation that's handled by
+  text alone.
 """
 
 
@@ -190,7 +196,7 @@ TOOLS = [
 
 
 def _execute_tool(name: str, tool_input: dict) -> dict:
-    print(f"[chat_agent] calling tool '{name}' with {tool_input}")
+    print(f"[chat_agent] calling tool '{name}' with {tool_input}", flush=True)
     try:
         if name == "list_tasks":
             tasks = storage.list_tasks(
@@ -241,7 +247,7 @@ def _execute_tool(name: str, tool_input: dict) -> dict:
 
         return {"error": f"unknown tool {name}"}
     except Exception as e:
-        print(f"[chat_agent] tool '{name}' failed with input {tool_input}: {e}")
+        print(f"[chat_agent] tool '{name}' failed with input {tool_input}: {e}", flush=True)
         return {"error": str(e)}
 
 
@@ -259,11 +265,13 @@ def handle_message(user_text: str):
 
     final_text = "Sorry, I couldn't come up with a response."
     options = None
+    any_tool_called = False
 
     for _ in range(MAX_TOOL_ITERATIONS):
         response = client.messages.create(
             model=model,
             max_tokens=600,
+            temperature=0,
             system=_system_prompt(),
             messages=messages,
             tools=TOOLS,
@@ -273,8 +281,11 @@ def handle_message(user_text: str):
 
         if response.stop_reason != "tool_use":
             final_text = text_blocks or "Done."
+            if not any_tool_called:
+                print(f"[chat_agent] WARNING: replied with no tool ever called. user_text={user_text!r} reply={final_text!r}", flush=True)
             break
 
+        any_tool_called = True
         tool_blocks = [b for b in response.content if b.type == "tool_use"]
         suggest_block = next((b for b in tool_blocks if b.name == "suggest_options"), None)
 
