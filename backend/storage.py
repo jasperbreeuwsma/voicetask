@@ -25,7 +25,7 @@ import libsql
 
 LOCAL_DB_PATH = Path(__file__).parent / "tasks.db"
 
-COLUMNS = ["id", "title", "priority", "status", "created_at", "due_date", "recurrence"]
+COLUMNS = ["id", "title", "priority", "status", "created_at", "due_date", "recurrence", "starred", "my_day"]
 
 _conn = None
 
@@ -68,7 +68,12 @@ def _run(fn, retries: int = 4, delay: float = 0.5):
 
 
 def _row_to_dict(row) -> dict:
-    return dict(zip(COLUMNS, row))
+    d = dict(zip(COLUMNS, row))
+    if "starred" in d:
+        d["starred"] = bool(d["starred"])
+    if "my_day" in d:
+        d["my_day"] = bool(d["my_day"])
+    return d
 
 
 def init_db():
@@ -82,16 +87,30 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
                 due_date TEXT,
-                recurrence TEXT
+                recurrence TEXT,
+                starred INTEGER NOT NULL DEFAULT 0,
+                my_day INTEGER NOT NULL DEFAULT 0
             )
             """
         )
-        # Migration for tables created before due_date/recurrence existed.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        # Migration for tables created before these columns existed.
         # SQLite/libsql has no "ADD COLUMN IF NOT EXISTS", so just ignore
         # the error if the column is already there.
         for stmt in (
             "ALTER TABLE tasks ADD COLUMN due_date TEXT",
             "ALTER TABLE tasks ADD COLUMN recurrence TEXT",
+            "ALTER TABLE tasks ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tasks ADD COLUMN my_day INTEGER NOT NULL DEFAULT 0",
         ):
             try:
                 conn.execute(stmt)
@@ -223,6 +242,55 @@ def delete_task(task_id: int) -> bool:
 def rename_task(task_id: int, new_title: str) -> bool:
     def _op(conn):
         conn.execute("UPDATE tasks SET title = ? WHERE id = ?", (new_title, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+def set_starred(task_id: int, starred: bool) -> bool:
+    def _op(conn):
+        conn.execute("UPDATE tasks SET starred = ? WHERE id = ?", (1 if starred else 0, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+def set_my_day(task_id: int, my_day: bool) -> bool:
+    def _op(conn):
+        conn.execute("UPDATE tasks SET my_day = ? WHERE id = ?", (1 if my_day else 0, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+# ---------- chat message history ----------
+
+def add_message(role: str, content: str) -> int:
+    def _op(conn):
+        cur = conn.execute(
+            "INSERT INTO messages (role, content, created_at) VALUES (?, ?, ?) RETURNING id",
+            (role, content, datetime.now().isoformat(timespec="seconds")),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return row[0]
+    return _run(_op)
+
+
+def get_messages(limit: int = 40):
+    def _op(conn):
+        rows = conn.execute(
+            "SELECT id, role, content, created_at FROM messages ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        rows = list(reversed(rows))
+        return [dict(zip(["id", "role", "content", "created_at"], r)) for r in rows]
+    return _run(_op)
+
+
+def clear_messages() -> bool:
+    def _op(conn):
+        conn.execute("DELETE FROM messages")
         conn.commit()
         return True
     return _run(_op)

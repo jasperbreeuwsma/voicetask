@@ -15,6 +15,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import chat_agent
 import excel_io
 import llm_parser
 import storage
@@ -57,7 +58,19 @@ class RenameUpdate(BaseModel):
     title: str
 
 
+class StarUpdate(BaseModel):
+    starred: bool
+
+
+class MyDayUpdate(BaseModel):
+    my_day: bool
+
+
 class CommandRequest(BaseModel):
+    text: str
+
+
+class ChatRequest(BaseModel):
     text: str
 
 
@@ -98,6 +111,22 @@ def rename(task_id: int, body: RenameUpdate):
     if not storage.get_task(task_id):
         raise HTTPException(404, "Task not found")
     storage.rename_task(task_id, body.title)
+    return storage.get_task(task_id)
+
+
+@app.patch("/api/tasks/{task_id}/star")
+def set_star(task_id: int, body: StarUpdate):
+    if not storage.get_task(task_id):
+        raise HTTPException(404, "Task not found")
+    storage.set_starred(task_id, body.starred)
+    return storage.get_task(task_id)
+
+
+@app.patch("/api/tasks/{task_id}/my-day")
+def set_my_day(task_id: int, body: MyDayUpdate):
+    if not storage.get_task(task_id):
+        raise HTTPException(404, "Task not found")
+    storage.set_my_day(task_id, body.my_day)
     return storage.get_task(task_id)
 
 
@@ -216,6 +245,39 @@ def run_command(body: CommandRequest):
         # Surface the real error instead of letting it crash into a
         # non-JSON 500 page (which the frontend can't parse). Guard the
         # fallback task list too, in case the database itself is down.
+        try:
+            tasks = storage.list_tasks()
+        except Exception:
+            tasks = []
+        return {"message": f"Error: {e}", "tasks": tasks}
+
+
+# ---------- conversational chat ----------
+
+@app.get("/api/chat/history")
+def chat_history():
+    try:
+        return storage.get_messages()
+    except Exception:
+        return []
+
+
+@app.post("/api/chat/clear")
+def chat_clear():
+    storage.clear_messages()
+    return {"cleared": True}
+
+
+@app.post("/api/chat")
+def chat(body: ChatRequest):
+    try:
+        reply = chat_agent.handle_message(body.text)
+        try:
+            tasks = storage.list_tasks()
+        except Exception:
+            tasks = []
+        return {"message": reply, "tasks": tasks}
+    except Exception as e:
         try:
             tasks = storage.list_tasks()
         except Exception:

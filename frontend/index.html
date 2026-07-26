@@ -23,6 +23,8 @@
     --low: #4fa8a0;
     --done: #4a5262;
     --row-alt: #171c24;
+    --bubble-user: #2a3140;
+    --bubble-assistant: #1a2029;
   }
 
   :root[data-theme="light"] {
@@ -39,6 +41,8 @@
     --low: #297d75;
     --done: #9aa0ab;
     --row-alt: #fbfaf6;
+    --bubble-user: #ece7d9;
+    --bubble-assistant: #ffffff;
   }
 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -106,7 +110,6 @@
   :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
   :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
-  /* spacer to balance the toggle button so title stays visually centered */
   .header-spacer { width: 38px; flex-shrink: 0; }
 
   /* --- mic --- */
@@ -114,14 +117,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 0 20px;
+    padding: 16px 0 16px;
     position: relative;
   }
 
   .mic-ring {
     position: relative;
-    width: 132px;
-    height: 132px;
+    width: 116px;
+    height: 116px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -154,8 +157,8 @@
   }
 
   .mic-btn {
-    width: 96px;
-    height: 96px;
+    width: 82px;
+    height: 82px;
     border-radius: 50%;
     border: none;
     background: var(--panel);
@@ -175,26 +178,91 @@
     color: var(--ink);
   }
 
-  .mic-btn svg { width: 34px; height: 34px; }
+  .mic-btn svg { width: 30px; height: 30px; }
 
   .status-line {
-    margin-top: 18px;
+    margin-top: 14px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--paper-dim);
     text-align: center;
-    min-height: 34px;
+    min-height: 20px;
     line-height: 1.5;
     padding: 0 12px;
   }
 
   .status-line.active { color: var(--signal); }
 
+  /* --- chat thread --- */
+  .chat-section { margin-bottom: 18px; }
+
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .chat-header h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--paper-dim);
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .clear-chat-btn {
+    background: none;
+    border: none;
+    color: var(--paper-dim);
+    font-size: 11.5px;
+    font-family: ui-monospace, monospace;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 2px;
+  }
+
+  .chat-thread {
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 2px;
+  }
+
+  .bubble {
+    max-width: 84%;
+    padding: 9px 12px;
+    border-radius: 14px;
+    font-size: 13.5px;
+    line-height: 1.4;
+  }
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--bubble-user);
+    border-bottom-right-radius: 4px;
+  }
+  .bubble.assistant {
+    align-self: flex-start;
+    background: var(--bubble-assistant);
+    border: 1px solid var(--panel-line);
+    border-bottom-left-radius: 4px;
+  }
+
+  .chat-empty {
+    color: var(--paper-dim);
+    font-size: 12.5px;
+    text-align: center;
+    padding: 10px;
+  }
+
   /* --- type-to-command fallback --- */
   .type-row {
     display: flex;
     gap: 8px;
-    margin: 4px 0 22px;
+    margin: 4px 0 20px;
   }
 
   .type-row input {
@@ -217,6 +285,28 @@
     padding: 0 16px;
     font-size: 14px;
     cursor: pointer;
+  }
+
+  /* --- view tabs --- */
+  .view-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .view-tab {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    border-radius: 9px;
+    padding: 8px 6px;
+    font-size: 12.5px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .view-tab.active {
+    border-color: var(--signal);
+    color: var(--signal);
   }
 
   /* --- controls: filter / sort --- */
@@ -242,8 +332,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 18px 0 8px;
-    cursor: default;
+    margin: 16px 0 8px;
+    cursor: pointer;
+    user-select: none;
   }
 
   .section-label h2 {
@@ -261,7 +352,7 @@
     color: var(--paper-dim);
   }
 
-  .section-label.clickable { cursor: pointer; user-select: none; }
+  .section-label .right { display: flex; align-items: center; gap: 6px; }
   .section-label .chevron { transition: transform 0.15s ease; color: var(--paper-dim); }
   .section-label.collapsed .chevron { transform: rotate(-90deg); }
 
@@ -269,16 +360,17 @@
     border: 1px solid var(--panel-line);
     border-radius: 12px;
     overflow: hidden;
+    margin-bottom: 4px;
   }
 
   .task-table.collapsed { display: none; }
 
   .row {
     display: grid;
-    grid-template-columns: 1fr 78px 76px 64px;
+    grid-template-columns: 1fr 78px 68px 96px;
     align-items: center;
-    gap: 8px;
-    padding: 11px 12px;
+    gap: 6px;
+    padding: 10px 10px;
     border-bottom: 1px solid var(--panel-line);
   }
   .row:last-child { border-bottom: none; }
@@ -290,7 +382,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--paper-dim);
-    padding: 9px 12px;
+    padding: 8px 10px;
   }
 
   .row.data:nth-child(even) { background: var(--row-alt); }
@@ -298,7 +390,7 @@
   .row-title-cell {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -313,7 +405,7 @@
   .priority-dot.low { background: var(--low); }
 
   .row-title {
-    font-size: 14.5px;
+    font-size: 14px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -337,7 +429,7 @@
 
   .due-badge {
     font-family: ui-monospace, monospace;
-    font-size: 10.5px;
+    font-size: 10px;
     letter-spacing: 0.02em;
   }
   .due-badge.overdue { color: var(--high); }
@@ -345,12 +437,12 @@
   .due-badge.upcoming { color: var(--teal); }
   .due-badge.none { color: var(--panel-line-strong); }
 
-  .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
 
   .icon-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
+    width: 25px;
+    height: 25px;
+    border-radius: 6px;
     border: none;
     background: transparent;
     color: var(--paper-dim);
@@ -361,20 +453,22 @@
     flex-shrink: 0;
   }
   .icon-btn:active { background: var(--panel-line); }
-  .icon-btn svg { width: 15px; height: 15px; }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn.star-on { color: var(--signal); }
+  .icon-btn.myday-on { color: var(--teal); }
 
   .empty-state {
     text-align: center;
     color: var(--paper-dim);
     font-size: 13.5px;
-    padding: 28px 20px;
+    padding: 24px 20px;
   }
 
   /* --- excel bar --- */
   .excel-bar {
     display: flex;
     gap: 10px;
-    margin-top: 26px;
+    margin-top: 24px;
   }
 
   .ghost-btn {
@@ -392,7 +486,7 @@
   #import-input { display: none; }
 
   @media (max-width: 420px) {
-    .row { grid-template-columns: 1fr 60px 64px; }
+    .row { grid-template-columns: 1fr 58px 90px; }
     .row-priority-label { display: none; }
   }
 </style>
@@ -426,12 +520,28 @@
         </svg>
       </button>
     </div>
-    <p class="status-line" id="status-line">Tap the mic and say a command</p>
+    <p class="status-line" id="status-line">Tap the mic, ask or say a command</p>
   </div>
 
   <div class="type-row">
-    <input type="text" id="type-input" placeholder="or type a command…" />
+    <input type="text" id="type-input" placeholder="ask or type a command…" />
     <button id="type-send">Send</button>
+  </div>
+
+  <div class="chat-section">
+    <div class="chat-header">
+      <h2>Conversation</h2>
+      <button class="clear-chat-btn" id="clear-chat-btn">clear</button>
+    </div>
+    <div class="chat-thread" id="chat-thread">
+      <div class="chat-empty" id="chat-empty">Ask something like "what are my top 3 upcoming tasks?"</div>
+    </div>
+  </div>
+
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="all">All</button>
+    <button class="view-tab" data-view="myday">☀ My Day</button>
+    <button class="view-tab" data-view="favorites">★ Favorites</button>
   </div>
 
   <div class="controls-row">
@@ -442,7 +552,7 @@
       <option value="low">Low only</option>
     </select>
     <select id="sort-select">
-      <option value="smart">Sort: Smart (due + priority)</option>
+      <option value="smart">Sort: Smart</option>
       <option value="due">Sort: Due date</option>
       <option value="priority">Sort: Priority</option>
       <option value="alpha">Sort: A–Z</option>
@@ -450,15 +560,11 @@
     </select>
   </div>
 
-  <div class="section-label">
-    <h2>Tasks</h2>
-    <span class="count" id="active-count">0</span>
-  </div>
-  <div class="task-table" id="active-table"></div>
+  <div id="active-groups"></div>
 
-  <div class="section-label clickable" id="completed-toggle">
+  <div class="section-label" id="completed-toggle">
     <h2>Completed</h2>
-    <span style="display:flex; align-items:center; gap:6px;">
+    <span class="right">
       <span class="count" id="completed-count">0</span>
       <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
     </span>
@@ -478,9 +584,8 @@ const API = ""; // same-origin; set to your backend URL if hosted separately
 const micBtn = document.getElementById("mic-btn");
 const micRing = document.getElementById("mic-ring");
 const statusLine = document.getElementById("status-line");
-const activeTable = document.getElementById("active-table");
+const activeGroups = document.getElementById("active-groups");
 const completedTable = document.getElementById("completed-table");
-const activeCount = document.getElementById("active-count");
 const completedCount = document.getElementById("completed-count");
 const completedToggle = document.getElementById("completed-toggle");
 const typeInput = document.getElementById("type-input");
@@ -491,8 +596,13 @@ const importInput = document.getElementById("import-input");
 const themeToggle = document.getElementById("theme-toggle");
 const priorityFilter = document.getElementById("priority-filter");
 const sortSelect = document.getElementById("sort-select");
+const chatThread = document.getElementById("chat-thread");
+const chatEmpty = document.getElementById("chat-empty");
+const clearChatBtn = document.getElementById("clear-chat-btn");
+const viewTabs = document.querySelectorAll(".view-tab");
 
 let allTasks = [];
+let currentView = "all";
 
 /* ---- theme ---- */
 function applyTheme(theme) {
@@ -509,6 +619,27 @@ themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme");
   applyTheme(current === "dark" ? "light" : "dark");
 });
+
+/* ---- view tabs ---- */
+viewTabs.forEach(tab => {
+  tab.addEventListener("click", () => {
+    viewTabs.forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    currentView = tab.dataset.view;
+    renderTables();
+  });
+});
+
+/* ---- collapsible group state (persisted) ---- */
+function getCollapseState() {
+  try { return JSON.parse(localStorage.getItem("voicetask-group-collapse") || "{}"); }
+  catch (e) { return {}; }
+}
+function setGroupCollapsed(key, collapsed) {
+  const state = getCollapseState();
+  state[key] = collapsed;
+  localStorage.setItem("voicetask-group-collapse", JSON.stringify(state));
+}
 
 /* ---- completed section collapse ---- */
 let completedCollapsed = true;
@@ -537,9 +668,15 @@ function iconTrash() {
 function iconCheck() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5"/></svg>`;
 }
+function iconStar(filled) {
+  return `<svg viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.6"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6L12 3Z"/></svg>`;
+}
+function iconSun() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+}
 
 function dueInfo(dueDate) {
-  if (!dueDate) return { cls: "none", label: "—" };
+  if (!dueDate) return { cls: "none", label: "—", days: null };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = new Date(dueDate + "T00:00:00");
@@ -573,11 +710,7 @@ function sortTasks(tasks, mode) {
   } else if (mode === "newest") {
     arr.sort((a, b) => b.id - a.id);
   } else {
-    // smart: overdue/today first, then priority, then soonest due date, then id
     arr.sort((a, b) => {
-      const aUrgent = a.due_date && dueInfo(a.due_date).days <= 0 ? 0 : 1;
-      const bUrgent = b.due_date && dueInfo(b.due_date).days <= 0 ? 0 : 1;
-      if (aUrgent !== bUrgent) return aUrgent - bUrgent;
       const p = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
       if (p !== 0) return p;
       if (!a.due_date && !b.due_date) return a.id - b.id;
@@ -601,10 +734,78 @@ function buildRow(t, isDone) {
       <div class="row-priority-label">${t.priority}</div>
       <div class="due-badge ${isDone ? '' : due.cls}">${isDone ? (t.due_date || '—') : due.label}</div>
       <div class="row-actions">
+        ${!isDone ? `<button class="icon-btn star-btn ${t.starred ? 'star-on' : ''}" data-id="${t.id}" data-val="${t.starred ? 0 : 1}">${iconStar(t.starred)}</button>` : ''}
+        ${!isDone ? `<button class="icon-btn myday-btn ${t.my_day ? 'myday-on' : ''}" data-id="${t.id}" data-val="${t.my_day ? 0 : 1}">${iconSun()}</button>` : ''}
         ${!isDone ? `<button class="icon-btn complete-btn" data-id="${t.id}">${iconCheck()}</button>` : ''}
         <button class="icon-btn delete-btn" data-id="${t.id}">${iconTrash()}</button>
       </div>
     </div>`;
+}
+
+function headRow() {
+  return `<div class="row head"><div>Task</div><div>Priority</div><div>Due</div><div></div></div>`;
+}
+
+function wireRowButtons(container) {
+  container.querySelectorAll(".complete-btn").forEach(b =>
+    b.addEventListener("click", () => completeTask(b.dataset.id)));
+  container.querySelectorAll(".delete-btn").forEach(b =>
+    b.addEventListener("click", () => deleteTask(b.dataset.id)));
+  container.querySelectorAll(".star-btn").forEach(b =>
+    b.addEventListener("click", () => toggleStar(b.dataset.id, b.dataset.val === "1")));
+  container.querySelectorAll(".myday-btn").forEach(b =>
+    b.addEventListener("click", () => toggleMyDay(b.dataset.id, b.dataset.val === "1")));
+}
+
+const GROUP_DEFS = [
+  { key: "overdue", label: "Overdue", test: d => d !== null && d < 0 },
+  { key: "today", label: "Today", test: d => d === 0 },
+  { key: "week", label: "This Week", test: d => d !== null && d >= 1 && d <= 7 },
+  { key: "later", label: "Later", test: d => d !== null && d > 7 },
+  { key: "nodate", label: "No Date", test: d => d === null },
+];
+
+function renderGroupedAll(tasks, sortMode) {
+  const collapseState = getCollapseState();
+  let html = "";
+  for (const g of GROUP_DEFS) {
+    const inGroup = tasks.filter(t => g.test(dueInfo(t.due_date).days));
+    if (!inGroup.length) continue;
+    const sorted = sortTasks(inGroup, sortMode);
+    const collapsed = !!collapseState[g.key];
+    html += `
+      <div class="section-label ${collapsed ? 'collapsed' : ''}" data-group="${g.key}">
+        <h2>${g.label}</h2>
+        <span class="right">
+          <span class="count">${sorted.length}</span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="task-table ${collapsed ? 'collapsed' : ''}" data-group-table="${g.key}">
+        ${headRow()}${sorted.map(t => buildRow(t, false)).join("")}
+      </div>`;
+  }
+  activeGroups.innerHTML = html || `<div class="empty-state">No tasks yet — say "add &lt;task&gt;" to start</div>`;
+
+  activeGroups.querySelectorAll(".section-label").forEach(label => {
+    label.addEventListener("click", () => {
+      const key = label.dataset.group;
+      const table = activeGroups.querySelector(`[data-group-table="${key}"]`);
+      const nowCollapsed = !label.classList.contains("collapsed");
+      label.classList.toggle("collapsed", nowCollapsed);
+      table.classList.toggle("collapsed", nowCollapsed);
+      setGroupCollapsed(key, nowCollapsed);
+    });
+  });
+  wireRowButtons(activeGroups);
+}
+
+function renderFlatActive(tasks, sortMode, emptyMsg) {
+  const sorted = sortTasks(tasks, sortMode);
+  activeGroups.innerHTML = sorted.length
+    ? `<div class="task-table">${headRow()}${sorted.map(t => buildRow(t, false)).join("")}</div>`
+    : `<div class="empty-state">${emptyMsg}</div>`;
+  wireRowButtons(activeGroups);
 }
 
 function renderTables() {
@@ -614,29 +815,22 @@ function renderTables() {
   let filtered = allTasks;
   if (filter !== "all") filtered = filtered.filter(t => t.priority === filter);
 
-  const active = sortTasks(filtered.filter(t => t.status !== "done"), sortMode);
+  const pending = filtered.filter(t => t.status !== "done");
   const completed = filtered.filter(t => t.status === "done").sort((a, b) => b.id - a.id);
 
-  activeCount.textContent = active.length;
+  if (currentView === "myday") {
+    renderFlatActive(pending.filter(t => t.my_day), sortMode, `Nothing in My Day — ask to "add X to my day"`);
+  } else if (currentView === "favorites") {
+    renderFlatActive(pending.filter(t => t.starred), sortMode, `No favorites yet — tap the star on a task`);
+  } else {
+    renderGroupedAll(pending, sortMode);
+  }
+
   completedCount.textContent = completed.length;
-
-  const headRow = `
-    <div class="row head">
-      <div>Task</div><div>Priority</div><div>Due</div><div></div>
-    </div>`;
-
-  activeTable.innerHTML = active.length
-    ? headRow + active.map(t => buildRow(t, false)).join("")
-    : `<div class="empty-state">No tasks yet — say "add &lt;task&gt;" to start</div>`;
-
   completedTable.innerHTML = completed.length
-    ? headRow + completed.map(t => buildRow(t, true)).join("")
+    ? headRow() + completed.map(t => buildRow(t, true)).join("")
     : `<div class="empty-state">Nothing completed yet</div>`;
-
-  document.querySelectorAll(".complete-btn").forEach(b =>
-    b.addEventListener("click", () => completeTask(b.dataset.id)));
-  document.querySelectorAll(".delete-btn").forEach(b =>
-    b.addEventListener("click", () => deleteTask(b.dataset.id)));
+  wireRowButtons(completedTable);
 }
 
 function renderTasks(tasks) {
@@ -663,16 +857,61 @@ async function deleteTask(id) {
   fetchTasks();
 }
 
+async function toggleStar(id, newVal) {
+  await fetch(`${API}/api/tasks/${id}/star`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ starred: !!newVal }),
+  });
+  fetchTasks();
+}
+
+async function toggleMyDay(id, newVal) {
+  await fetch(`${API}/api/tasks/${id}/my-day`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ my_day: !!newVal }),
+  });
+  fetchTasks();
+}
+
+/* ---- chat thread ---- */
+function addBubble(role, text) {
+  chatEmpty.style.display = "none";
+  const div = document.createElement("div");
+  div.className = `bubble ${role}`;
+  div.textContent = text;
+  chatThread.appendChild(div);
+  chatThread.scrollTop = chatThread.scrollHeight;
+}
+
+async function loadChatHistory() {
+  try {
+    const res = await fetch(`${API}/api/chat/history`);
+    const messages = await res.json();
+    if (messages.length) chatEmpty.style.display = "none";
+    messages.forEach(m => addBubble(m.role, m.content));
+  } catch (e) { /* non-fatal */ }
+}
+
+clearChatBtn.addEventListener("click", async () => {
+  await fetch(`${API}/api/chat/clear`, { method: "POST" });
+  chatThread.querySelectorAll(".bubble").forEach(b => b.remove());
+  chatEmpty.style.display = "block";
+});
+
 async function sendCommand(text) {
+  addBubble("user", text);
   setStatus(`Thinking about "${text}"…`, true);
   try {
-    const res = await fetch(`${API}/api/command`, {
+    const res = await fetch(`${API}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
-    setStatus(data.message);
+    addBubble("assistant", data.message);
+    setStatus("Tap the mic, ask or say a command");
     speak(data.message);
     renderTasks(data.tasks || []);
   } catch (e) {
@@ -721,7 +960,7 @@ if (SpeechRecognition) {
     micRing.classList.remove("listening");
   };
 } else {
-  setStatus("Voice input isn't supported in this browser — type a command below");
+  setStatus("Voice input isn't supported in this browser — type below");
   micBtn.disabled = true;
   micBtn.style.opacity = "0.4";
 }
@@ -764,6 +1003,7 @@ importInput.addEventListener("change", async () => {
 });
 
 fetchTasks();
+loadChatHistory();
 </script>
 </body>
 </html>
