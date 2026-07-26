@@ -7,21 +7,25 @@ Task storage using libsql — the same client library works against:
 libsql's Python API mirrors sqlite3: connect(), execute(), commit(), fetchall().
 
 Turso connections go over the network (Hrana protocol), which can hit
-transient hiccups — especially right after a free-tier host wakes up from
-being idle. _run() below retries once with a fresh connection if that happens,
-instead of failing the whole request.
+transient hiccups. _run() below reuses a cached connection and retries with
+backoff if something goes wrong, instead of failing the whole request.
+
+due_date is stored as a plain "YYYY-MM-DD" date (no time-of-day, for
+simplicity). recurrence is one of: null, "daily", "weekly", "monthly".
+When a recurring task is completed, the next occurrence is created
+automatically with due_date advanced accordingly.
 """
+import calendar
 import os
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import libsql
 
 LOCAL_DB_PATH = Path(__file__).parent / "tasks.db"
 
-COLUMNS = ["id", "title", "priority", "status", "created_at"]
-
+COLUMNS = ["id", "title", "priority", "status", "created_at", "due_date", "recurrence"]
 
 _conn = None
 
@@ -76,19 +80,48 @@ def init_db():
                 title TEXT NOT NULL,
                 priority TEXT NOT NULL DEFAULT 'medium',
                 status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                due_date TEXT,
+                recurrence TEXT
             )
             """
         )
+        # Migration for tables created before due_date/recurrence existed.
+        # SQLite/libsql has no "ADD COLUMN IF NOT EXISTS", so just ignore
+        # the error if the column is already there.
+        for stmt in (
+            "ALTER TABLE tasks ADD COLUMN due_date TEXT",
+            "ALTER TABLE tasks ADD COLUMN recurrence TEXT",
+        ):
+            try:
+                conn.execute(stmt)
+            except Exception:
+                pass
         conn.commit()
     _run(_op)
 
 
-def add_task(title: str, priority: str = "medium") -> int:
+def _next_due_date(due_date_str: str, recurrence: str) -> str:
+    d = date.fromisoformat(due_date_str)
+    if recurrence == "daily":
+        d = d + timedelta(days=1)
+    elif recurrence == "weekly":
+        d = d + timedelta(days=7)
+    elif recurrence == "monthly":
+        month = d.month + 1
+        year = d.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(d.day, calendar.monthrange(year, month)[1])
+        d = date(year, month, day)
+    return d.isoformat()
+
+
+def add_task(title: str, priority: str = "medium", due_date: str = None, recurrence: str = None) -> int:
     def _op(conn):
         cur = conn.execute(
-            "INSERT INTO tasks (title, priority, status, created_at) VALUES (?, ?, 'pending', ?) RETURNING id",
-            (title, priority, datetime.now().isoformat(timespec="seconds")),
+            """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence)
+               VALUES (?, ?, 'pending', ?, ?, ?) RETURNING id""",
+            (title, priority, datetime.now().isoformat(timespec="seconds"), due_date, recurrence),
         )
         row = cur.fetchone()
         conn.commit()
@@ -106,7 +139,15 @@ def list_tasks(status: str = "all", priority: str = "all"):
         if priority != "all":
             query += " AND priority = ?"
             params.append(priority)
-        query += " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, id"
+        # Overdue/due-today first, then by priority, then soonest due date, then id.
+        query += """
+            ORDER BY
+                CASE WHEN due_date IS NOT NULL AND date(due_date) <= date('now') AND status != 'done' THEN 0 ELSE 1 END,
+                CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+                due_date,
+                id
+        """
         rows = conn.execute(query, params).fetchall()
         return [_row_to_dict(r) for r in rows]
     return _run(_op)
@@ -137,9 +178,35 @@ def update_priority(task_id: int, priority: str) -> bool:
     return _run(_op)
 
 
-def complete_task(task_id: int) -> bool:
+def update_due_date(task_id: int, due_date: str) -> bool:
     def _op(conn):
+        conn.execute("UPDATE tasks SET due_date = ? WHERE id = ?", (due_date, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+def complete_task(task_id: int) -> bool:
+    """Marks a task done. If it's recurring, also creates the next occurrence."""
+    def _op(conn):
+        row = conn.execute(
+            f"SELECT {', '.join(COLUMNS)} FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if not row:
+            return False
+        task = _row_to_dict(row)
+
         conn.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (task_id,))
+
+        if task["recurrence"] and task["due_date"]:
+            next_due = _next_due_date(task["due_date"], task["recurrence"])
+            conn.execute(
+                """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence)
+                   VALUES (?, ?, 'pending', ?, ?, ?)""",
+                (task["title"], task["priority"], datetime.now().isoformat(timespec="seconds"),
+                 next_due, task["recurrence"]),
+            )
+
         conn.commit()
         return True
     return _run(_op)

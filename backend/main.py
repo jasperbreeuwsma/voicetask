@@ -5,6 +5,7 @@ frontend, and serves the frontend itself as static files so the whole app is
 one deployable service.
 """
 import os
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -40,10 +41,16 @@ def on_startup():
 class TaskCreate(BaseModel):
     title: str
     priority: str = "medium"
+    due_date: str | None = None
+    recurrence: str | None = None
 
 
 class PriorityUpdate(BaseModel):
     priority: str
+
+
+class DueDateUpdate(BaseModel):
+    due_date: str | None = None
 
 
 class RenameUpdate(BaseModel):
@@ -66,7 +73,7 @@ def get_tasks(status: str = "all", priority: str = "all"):
 
 @app.post("/api/tasks")
 def create_task(task: TaskCreate):
-    task_id = storage.add_task(task.title, task.priority)
+    task_id = storage.add_task(task.title, task.priority, task.due_date, task.recurrence)
     return storage.get_task(task_id)
 
 
@@ -75,6 +82,14 @@ def set_priority(task_id: int, body: PriorityUpdate):
     if not storage.get_task(task_id):
         raise HTTPException(404, "Task not found")
     storage.update_priority(task_id, body.priority)
+    return storage.get_task(task_id)
+
+
+@app.patch("/api/tasks/{task_id}/due-date")
+def set_due_date(task_id: int, body: DueDateUpdate):
+    if not storage.get_task(task_id):
+        raise HTTPException(404, "Task not found")
+    storage.update_due_date(task_id, body.due_date)
     return storage.get_task(task_id)
 
 
@@ -104,16 +119,37 @@ def delete(task_id: int):
 
 # ---------- voice/text command ----------
 
+def _due_phrase(due_date: str) -> str:
+    if not due_date:
+        return ""
+    today = date.today()
+    d = date.fromisoformat(due_date)
+    delta = (d - today).days
+    if delta == 0:
+        return " (due today)"
+    if delta == 1:
+        return " (due tomorrow)"
+    if delta < 0:
+        return f" (overdue since {due_date})"
+    return f" (due {due_date})"
+
+
 def execute_intent(intent: dict) -> dict:
     action = intent.get("action", "unknown")
 
     if action == "add":
         title = intent.get("title")
         priority = intent.get("priority") or "medium"
+        due_date = intent.get("due_date")
+        recurrence = intent.get("recurrence")
         if not title:
             return {"message": "I didn't catch what the task should say.", "tasks": storage.list_tasks()}
-        storage.add_task(title, priority)
-        return {"message": f"Added '{title}' with {priority} priority.", "tasks": storage.list_tasks()}
+        storage.add_task(title, priority, due_date, recurrence)
+        rec_phrase = f", repeating {recurrence}" if recurrence else ""
+        return {
+            "message": f"Added '{title}' with {priority} priority{_due_phrase(due_date)}{rec_phrase}.",
+            "tasks": storage.list_tasks(),
+        }
 
     if action == "list":
         status = intent.get("filter_status") or "pending"
@@ -121,7 +157,7 @@ def execute_intent(intent: dict) -> dict:
         tasks = storage.list_tasks(status=status, priority=priority)
         if not tasks:
             return {"message": "You have no matching tasks.", "tasks": tasks}
-        lines = [f"{t['title']} ({t['priority']} priority)" for t in tasks]
+        lines = [f"{t['title']} ({t['priority']} priority{_due_phrase(t.get('due_date'))})" for t in tasks]
         return {"message": f"You have {len(tasks)} tasks: " + "; ".join(lines), "tasks": tasks}
 
     if action == "complete":
@@ -130,7 +166,8 @@ def execute_intent(intent: dict) -> dict:
         if not task:
             return {"message": f"I couldn't find a task matching '{match}'.", "tasks": storage.list_tasks()}
         storage.complete_task(task["id"])
-        return {"message": f"Marked '{task['title']}' as done.", "tasks": storage.list_tasks()}
+        note = " Next occurrence added." if task.get("recurrence") else ""
+        return {"message": f"Marked '{task['title']}' as done.{note}", "tasks": storage.list_tasks()}
 
     if action == "delete":
         match = intent.get("match")
@@ -148,6 +185,15 @@ def execute_intent(intent: dict) -> dict:
             return {"message": f"I couldn't find a task matching '{match}'.", "tasks": storage.list_tasks()}
         storage.update_priority(task["id"], priority)
         return {"message": f"Set '{task['title']}' to {priority} priority.", "tasks": storage.list_tasks()}
+
+    if action == "update_due_date":
+        match = intent.get("match")
+        due_date = intent.get("due_date")
+        task = storage.find_task_by_title(match) if match else None
+        if not task:
+            return {"message": f"I couldn't find a task matching '{match}'.", "tasks": storage.list_tasks()}
+        storage.update_due_date(task["id"], due_date)
+        return {"message": f"Moved '{task['title']}'{_due_phrase(due_date)}.", "tasks": storage.list_tasks()}
 
     if action == "rename":
         match = intent.get("match")

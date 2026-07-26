@@ -230,6 +230,16 @@
     color: var(--paper-dim);
   }
 
+  .due-badge {
+    font-family: ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    margin-left: 8px;
+  }
+  .due-badge.overdue { color: var(--high); }
+  .due-badge.today { color: var(--signal); }
+  .due-badge.upcoming { color: var(--teal); }
+
   .task-actions { display: flex; gap: 6px; }
 
   .icon-btn {
@@ -351,6 +361,24 @@ function iconCheck() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5"/></svg>`;
 }
 
+function formatDueBadge(dueDate) {
+  if (!dueDate) return "";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dueDate + "T00:00:00");
+  const diffDays = Math.round((d - today) / 86400000);
+
+  let cls = "upcoming";
+  let label = dueDate;
+  if (diffDays < 0) { cls = "overdue"; label = "overdue"; }
+  else if (diffDays === 0) { cls = "today"; label = "today"; }
+  else if (diffDays === 1) { cls = "upcoming"; label = "tomorrow"; }
+  else {
+    label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return `<span class="due-badge ${cls}">${label}</span>`;
+}
+
 function renderTasks(tasks) {
   taskCount.textContent = tasks.length;
   if (!tasks.length) {
@@ -361,7 +389,7 @@ function renderTasks(tasks) {
     <div class="task ${t.priority} ${t.status === 'done' ? 'done' : ''}" data-id="${t.id}">
       <div>
         <div class="task-title">${escapeHtml(t.title)}</div>
-        <div class="task-priority">${t.priority}${t.status === 'done' ? ' · done' : ''}</div>
+        <div class="task-priority">${t.priority}${t.status === 'done' ? ' · done' : ''}${t.recurrence ? ' · ↻ ' + t.recurrence : ''}${formatDueBadge(t.due_date)}</div>
       </div>
       <div class="task-actions">
         ${t.status !== 'done' ? `<button class="icon-btn complete-btn" data-id="${t.id}">${iconCheck()}</button>` : ''}
