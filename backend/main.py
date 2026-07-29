@@ -44,6 +44,7 @@ class TaskCreate(BaseModel):
     priority: str = "medium"
     due_date: str | None = None
     recurrence: str | None = None
+    category: str | None = None
 
 
 class PriorityUpdate(BaseModel):
@@ -66,6 +67,14 @@ class MyDayUpdate(BaseModel):
     my_day: bool
 
 
+class CategoryUpdate(BaseModel):
+    category: str | None = None
+
+
+class CategoryCreate(BaseModel):
+    name: str
+
+
 class CommandRequest(BaseModel):
     text: str
 
@@ -86,7 +95,7 @@ def get_tasks(status: str = "all", priority: str = "all"):
 
 @app.post("/api/tasks")
 def create_task(task: TaskCreate):
-    task_id = storage.add_task(task.title, task.priority, task.due_date, task.recurrence)
+    task_id = storage.add_task(task.title, task.priority, task.due_date, task.recurrence, task.category)
     return storage.get_task(task_id)
 
 
@@ -128,6 +137,37 @@ def set_my_day(task_id: int, body: MyDayUpdate):
         raise HTTPException(404, "Task not found")
     storage.set_my_day(task_id, body.my_day)
     return storage.get_task(task_id)
+
+
+@app.patch("/api/tasks/{task_id}/category")
+def set_task_category(task_id: int, body: CategoryUpdate):
+    if not storage.get_task(task_id):
+        raise HTTPException(404, "Task not found")
+    storage.set_task_category(task_id, body.category)
+    return storage.get_task(task_id)
+
+
+@app.get("/api/categories")
+def get_categories():
+    try:
+        return storage.list_categories()
+    except Exception:
+        return []
+
+
+@app.post("/api/categories")
+def create_category(body: CategoryCreate):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Group name can't be empty")
+    storage.add_category(name)
+    return storage.list_categories()
+
+
+@app.delete("/api/categories/{name}")
+def remove_category(name: str):
+    storage.delete_category(name)
+    return storage.list_categories()
 
 
 @app.post("/api/tasks/{task_id}/complete")

@@ -327,6 +327,56 @@
     color: var(--signal);
   }
 
+  /* --- groups (categories) --- */
+  .group-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .group-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    color: var(--paper-dim);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .group-chip.active {
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+  .group-chip .x-btn {
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0 0 2px;
+  }
+  .group-chip .x-btn:hover { opacity: 1; }
+  .group-chip.add-chip {
+    border-style: dashed;
+  }
+
+  .row-category-select {
+    background: transparent;
+    border: none;
+    color: var(--teal);
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    max-width: 70px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .row-category-select:invalid { color: var(--panel-line-strong); }
+
   /* --- controls: filter / sort --- */
   .controls-row {
     display: flex;
@@ -562,6 +612,8 @@
     <button class="view-tab" data-view="favorites">★ Favorites</button>
   </div>
 
+  <div class="group-bar" id="group-bar"></div>
+
   <div class="controls-row">
     <select id="priority-filter">
       <option value="all">All priorities</option>
@@ -621,6 +673,8 @@ const viewTabs = document.querySelectorAll(".view-tab");
 
 let allTasks = [];
 let currentView = "all";
+let allCategories = [];
+let activeGroupFilter = null; // null = all groups
 
 /* ---- theme ---- */
 function applyTheme(theme) {
@@ -740,6 +794,14 @@ function sortTasks(tasks, mode) {
   return arr;
 }
 
+function categoryOptionsHtml(selected) {
+  const opts = ['<option value="">no group</option>'];
+  allCategories.forEach(c => {
+    opts.push(`<option value="${escapeHtml(c.name)}" ${c.name === selected ? "selected" : ""}>${escapeHtml(c.name)}</option>`);
+  });
+  return opts.join("");
+}
+
 function buildRow(t, isDone) {
   const due = dueInfo(t.due_date);
   return `
@@ -748,6 +810,9 @@ function buildRow(t, isDone) {
         ${!isDone ? `<span class="priority-dot ${t.priority}"></span>` : ''}
         <span class="row-title">${escapeHtml(t.title)}</span>
         ${t.recurrence ? `<span class="row-recurrence">↻</span>` : ''}
+        ${!isDone
+          ? `<select class="row-category-select category-select" data-id="${t.id}">${categoryOptionsHtml(t.category)}</select>`
+          : (t.category ? `<span class="row-recurrence">${escapeHtml(t.category)}</span>` : '')}
       </div>
       <div class="row-priority-label">${t.priority}</div>
       <div class="due-badge ${isDone ? '' : due.cls}">${isDone ? (t.due_date || '—') : due.label}</div>
@@ -773,6 +838,8 @@ function wireRowButtons(container) {
     b.addEventListener("click", () => toggleStar(b.dataset.id, b.dataset.val === "1")));
   container.querySelectorAll(".myday-btn").forEach(b =>
     b.addEventListener("click", () => toggleMyDay(b.dataset.id, b.dataset.val === "1")));
+  container.querySelectorAll(".category-select").forEach(sel =>
+    sel.addEventListener("change", () => setTaskCategory(sel.dataset.id, sel.value)));
 }
 
 const GROUP_DEFS = [
@@ -832,6 +899,7 @@ function renderTables() {
 
   let filtered = allTasks;
   if (filter !== "all") filtered = filtered.filter(t => t.priority === filter);
+  if (activeGroupFilter) filtered = filtered.filter(t => t.category === activeGroupFilter);
 
   const pending = filtered.filter(t => t.status !== "done");
   const completed = filtered.filter(t => t.status === "done").sort((a, b) => b.id - a.id);
@@ -891,6 +959,66 @@ async function toggleMyDay(id, newVal) {
     body: JSON.stringify({ my_day: !!newVal }),
   });
   fetchTasks();
+}
+
+async function setTaskCategory(id, category) {
+  await fetch(`${API}/api/tasks/${id}/category`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: category || null }),
+  });
+  fetchTasks();
+}
+
+const groupBar = document.getElementById("group-bar");
+
+function renderGroupBar() {
+  const chips = [`<button class="group-chip ${!activeGroupFilter ? 'active' : ''}" data-name="">All</button>`];
+  allCategories.forEach(c => {
+    chips.push(`
+      <button class="group-chip ${activeGroupFilter === c.name ? 'active' : ''}" data-name="${escapeHtml(c.name)}">
+        ${escapeHtml(c.name)}<span class="x-btn" data-del="${escapeHtml(c.name)}">×</span>
+      </button>`);
+  });
+  chips.push(`<button class="group-chip add-chip" id="add-group-chip">+ Add group</button>`);
+  groupBar.innerHTML = chips.join("");
+
+  groupBar.querySelectorAll(".group-chip[data-name]").forEach(chip => {
+    chip.addEventListener("click", (e) => {
+      if (e.target.classList.contains("x-btn")) return; // handled separately
+      activeGroupFilter = chip.dataset.name || null;
+      renderGroupBar();
+      renderTables();
+    });
+  });
+  groupBar.querySelectorAll(".x-btn").forEach(x => {
+    x.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const name = x.dataset.del;
+      if (!confirm(`Delete the "${name}" group? Tasks in it will become ungrouped, not deleted.`)) return;
+      await fetch(`${API}/api/categories/${encodeURIComponent(name)}`, { method: "DELETE" });
+      if (activeGroupFilter === name) activeGroupFilter = null;
+      await fetchCategories();
+      fetchTasks();
+    });
+  });
+  document.getElementById("add-group-chip").addEventListener("click", async () => {
+    const name = prompt("New group name (e.g. Work, Private, Project A):");
+    if (!name || !name.trim()) return;
+    await fetch(`${API}/api/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    await fetchCategories();
+    renderTables();
+  });
+}
+
+async function fetchCategories() {
+  const res = await fetch(`${API}/api/categories`);
+  allCategories = await res.json();
+  renderGroupBar();
 }
 
 /* ---- chat thread ---- */
@@ -1037,8 +1165,11 @@ importInput.addEventListener("change", async () => {
   importInput.value = "";
 });
 
-fetchTasks();
-loadChatHistory();
+(async function init() {
+  await fetchCategories();
+  await fetchTasks();
+  loadChatHistory();
+})();
 </script>
 </body>
 </html>

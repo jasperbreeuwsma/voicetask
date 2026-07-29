@@ -43,6 +43,11 @@ genuinely useful assistant, not just a command executor:
 - due_date is a plain YYYY-MM-DD date, no time-of-day. Resolve relative
   dates ("tomorrow", "next Friday") using today's date above.
 - recurrence is one of: daily, weekly, monthly, or null.
+- The user can organize tasks into groups/categories they define themselves
+  (e.g. Work, Private, Project A). If asked to add or move a task "to" a
+  group, check list_categories first - if the group doesn't exist yet,
+  create it with add_category, then assign the task. Don't invent group
+  names the user didn't ask for.
 - When you need to act on a specific task, call list_tasks or search_tasks
   first to find its id, then use that id in the action tool. Don't guess ids.
 - When you ask a question that has a natural small set of likely answers -
@@ -105,6 +110,7 @@ TOOLS = [
                 "priority": {"type": "string", "enum": ["low", "medium", "high"]},
                 "due_date": {"type": "string", "description": "YYYY-MM-DD or omit if none"},
                 "recurrence": {"type": "string", "enum": ["daily", "weekly", "monthly"], "description": "Omit if one-time."},
+                "category": {"type": "string", "description": "An existing group/category name to file this under, e.g. 'Work'. Omit if ungrouped. Call list_categories first if unsure what groups exist."},
             },
             "required": ["title"],
         },
@@ -176,6 +182,41 @@ TOOLS = [
         },
     },
     {
+        "name": "list_categories",
+        "description": "List the user's existing task groups/categories (e.g. Work, Private, Project A).",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "add_category",
+        "description": "Create a new group/category for organizing tasks. If it already exists, this is a no-op.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "delete_category",
+        "description": "Delete a group/category by name. Tasks in it are NOT deleted, they just become ungrouped.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "set_task_category",
+        "description": "Assign a task to a group/category, or remove it from its group by omitting category.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "integer"},
+                "category": {"type": "string", "description": "Existing group name, or omit/empty to ungroup"},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
         "name": "suggest_options",
         "description": "Attach 2-4 short tappable quick-reply buttons to the question you're asking the user right now. Always pair this with your actual question as normal reply text in the same turn.",
         "input_schema": {
@@ -215,6 +256,7 @@ def _execute_tool(name: str, tool_input: dict) -> dict:
                 tool_input.get("priority", "medium"),
                 tool_input.get("due_date"),
                 tool_input.get("recurrence"),
+                tool_input.get("category"),
             )
             return {"task": storage.get_task(task_id)}
 
@@ -240,6 +282,21 @@ def _execute_tool(name: str, tool_input: dict) -> dict:
 
         if name == "set_my_day":
             storage.set_my_day(tool_input["task_id"], tool_input["my_day"])
+            return {"ok": True}
+
+        if name == "list_categories":
+            return {"categories": storage.list_categories()}
+
+        if name == "add_category":
+            storage.add_category(tool_input["name"])
+            return {"ok": True, "categories": storage.list_categories()}
+
+        if name == "delete_category":
+            storage.delete_category(tool_input["name"])
+            return {"ok": True, "categories": storage.list_categories()}
+
+        if name == "set_task_category":
+            storage.set_task_category(tool_input["task_id"], tool_input.get("category"))
             return {"ok": True}
 
         if name == "suggest_options":

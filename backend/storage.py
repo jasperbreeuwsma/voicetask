@@ -25,7 +25,7 @@ import libsql
 
 LOCAL_DB_PATH = Path(__file__).parent / "tasks.db"
 
-COLUMNS = ["id", "title", "priority", "status", "created_at", "due_date", "recurrence", "starred", "my_day"]
+COLUMNS = ["id", "title", "priority", "status", "created_at", "due_date", "recurrence", "starred", "my_day", "category"]
 
 _conn = None
 
@@ -89,7 +89,8 @@ def init_db():
                 due_date TEXT,
                 recurrence TEXT,
                 starred INTEGER NOT NULL DEFAULT 0,
-                my_day INTEGER NOT NULL DEFAULT 0
+                my_day INTEGER NOT NULL DEFAULT 0,
+                category TEXT
             )
             """
         )
@@ -103,6 +104,15 @@ def init_db():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         # Migration for tables created before these columns existed.
         # SQLite/libsql has no "ADD COLUMN IF NOT EXISTS", so just ignore
         # the error if the column is already there.
@@ -111,6 +121,7 @@ def init_db():
             "ALTER TABLE tasks ADD COLUMN recurrence TEXT",
             "ALTER TABLE tasks ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE tasks ADD COLUMN my_day INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE tasks ADD COLUMN category TEXT",
         ):
             try:
                 conn.execute(stmt)
@@ -135,12 +146,12 @@ def _next_due_date(due_date_str: str, recurrence: str) -> str:
     return d.isoformat()
 
 
-def add_task(title: str, priority: str = "medium", due_date: str = None, recurrence: str = None) -> int:
+def add_task(title: str, priority: str = "medium", due_date: str = None, recurrence: str = None, category: str = None) -> int:
     def _op(conn):
         cur = conn.execute(
-            """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence)
-               VALUES (?, ?, 'pending', ?, ?, ?) RETURNING id""",
-            (title, priority, datetime.now().isoformat(timespec="seconds"), due_date, recurrence),
+            """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence, category)
+               VALUES (?, ?, 'pending', ?, ?, ?, ?) RETURNING id""",
+            (title, priority, datetime.now().isoformat(timespec="seconds"), due_date, recurrence, category),
         )
         row = cur.fetchone()
         conn.commit()
@@ -220,10 +231,10 @@ def complete_task(task_id: int) -> bool:
         if task["recurrence"] and task["due_date"]:
             next_due = _next_due_date(task["due_date"], task["recurrence"])
             conn.execute(
-                """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence)
-                   VALUES (?, ?, 'pending', ?, ?, ?)""",
+                """INSERT INTO tasks (title, priority, status, created_at, due_date, recurrence, category)
+                   VALUES (?, ?, 'pending', ?, ?, ?, ?)""",
                 (task["title"], task["priority"], datetime.now().isoformat(timespec="seconds"),
-                 next_due, task["recurrence"]),
+                 next_due, task["recurrence"], task["category"]),
             )
 
         conn.commit()
@@ -258,6 +269,51 @@ def set_starred(task_id: int, starred: bool) -> bool:
 def set_my_day(task_id: int, my_day: bool) -> bool:
     def _op(conn):
         conn.execute("UPDATE tasks SET my_day = ? WHERE id = ?", (1 if my_day else 0, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+def set_task_category(task_id: int, category: str) -> bool:
+    """category can be None/empty to remove a task from its group."""
+    def _op(conn):
+        conn.execute("UPDATE tasks SET category = ? WHERE id = ?", (category or None, task_id))
+        conn.commit()
+        return True
+    return _run(_op)
+
+
+# ---------- categories (user-defined groups) ----------
+
+def list_categories():
+    def _op(conn):
+        rows = conn.execute("SELECT id, name FROM categories ORDER BY name COLLATE NOCASE").fetchall()
+        return [{"id": r[0], "name": r[1]} for r in rows]
+    return _run(_op)
+
+
+def add_category(name: str) -> int:
+    name = name.strip()
+    def _op(conn):
+        existing = conn.execute("SELECT id FROM categories WHERE name = ?", (name,)).fetchone()
+        if existing:
+            return existing[0]
+        cur = conn.execute(
+            "INSERT INTO categories (name, created_at) VALUES (?, ?) RETURNING id",
+            (name, datetime.now().isoformat(timespec="seconds")),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return row[0]
+    return _run(_op)
+
+
+def delete_category(name: str) -> bool:
+    """Deletes the group and un-groups any tasks that were in it (their
+    category is cleared, they are NOT deleted)."""
+    def _op(conn):
+        conn.execute("UPDATE tasks SET category = NULL WHERE category = ?", (name,))
+        conn.execute("DELETE FROM categories WHERE name = ?", (name,))
         conn.commit()
         return True
     return _run(_op)
